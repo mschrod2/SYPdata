@@ -1,0 +1,208 @@
+---
+title: "graph"
+author: "Madison Schroder"
+date: '2022-04-24'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    fig_height: 6
+    fig_width: 9
+    toc: yes
+    toc_depth: 4
+header-includes: \usepackage{caption}
+---
+\captionsetup[table]{labelformat=empty}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(ggalt)
+library(textreg)
+library(scales)
+library(ggthemes)
+library(kableExtra)
+library(hrbrthemes)
+library(dbplyr)
+library(tidyverse)
+library(lubridate)
+library(writexl)
+load("output/alldata.RData")
+load("output/aggregate_total.RData")
+load("output/aggregate_amount_total.RData")
+load("output/aggregate_OR.RData")
+load("output/aggregate_OoS.RData")
+load("output/aggregate_OR_n.RData")
+load("output/aggregate_OoS_n.RData")
+```
+
+```{r echo=FALSE, warning=FALSE, fig.cap=NULL, tab.cap=NULL}
+measure110 <- subset(alldata, grepl("110", ballot_measure))
+measure110 <- subset(measure110, select=c("ballot_measure", "OR_total", "OoS_total"))
+measure110 <- rename(measure110, "Ballot Measure"= "ballot_measure", "Total Oregon Contributions"= "OR_total",
+                     "Total Out of State Contributions"= "OoS_total")
+measure110$Total <- sum(measure110$`Total Out of State Contributions`,measure110$`Total Oregon Contributions`)
+measure110$'Percent Out of State' <- (measure110$`Total Out of State Contributions`/measure110$Total)
+measure110$'Percent Oregon' <- (measure110$`Total Oregon Contributions`/measure110$Total)
+measure110 <- prettyNum(measure110, big.mark = ",")
+measure110 <- t(measure110)
+
+knitr::kable(measure110, caption = "Table 1: Oregon Ballot Measure 110 Contributions", "pipe", align = "lccrr")
+measure110 %>%
+  kbl(caption= "Aggregate Contributions by Ballot Measure") %>%
+  kable_paper("hover", full_width = F) 
+
+```
+
+``` {r analysis models, echo=FALSE, warning=FALSE, results="asis", fig.cap=NULL, tab.cap=NULL}
+alldata$`pass/fail` <- as.factor(alldata$`pass/fail`)
+
+model1_prop <- glm(`pass/fail`~propsupport_ORtotal,
+                  data = alldata, family=binomial(link=logit))
+model2_prop <- glm(`pass/fail`~propsupport_OoStotal,
+                  data = alldata, family=binomial(link=logit))
+model3_prop <- glm(`pass/fail`~propoppose_ORtotal,
+                  data = alldata, family=binomial(link=logit))
+model4_prop <- glm(`pass/fail`~propoppose_OoStotal,
+                  data = alldata, family=binomial(link=logit))
+model5_prop <- glm(`pass/fail`~propsupport_ORtotal+propsupport_OoStotal+propoppose_ORtotal+propoppose_OoStotal,
+                   data = alldata, family=binomial(link=logit))
+texreg::knitreg(list(model1_prop, model2_prop, model3_prop, model4_prop, model5_prop),
+        digits=3,
+        caption="OLS Regression Models Contributions Total Contributions",
+        caption.above = TRUE)
+
+model1_pubop <- glm(`pass/fail`~propsupport_ORtotal+support-1,
+                  data = alldata, family=binomial(link=logit))
+model2_pubop <- glm(`pass/fail`~propsupport_OoStotal+support -1,
+                  data = alldata, family=binomial(link=logit))
+model3_pubop <- glm(`pass/fail`~propoppose_ORtotal+support -1,
+                  data = alldata, family=binomial(link=logit))
+model4_pubop <- glm(`pass/fail`~propoppose_OoStotal+support -1,
+                  data = alldata, family=binomial(link=logit))
+model5_pubop <- glm(`pass/fail`~propsupport_ORtotal+propsupport_OoStotal+propoppose_ORtotal+propoppose_OoStotal+support -1,
+                  data = alldata, family=binomial(link=logit))
+texreg::knitreg(list(model1_pubop, model2_pubop, model3_pubop, model4_pubop, model5_pubop),
+        digits=3,
+        caption="OLS Regression Models Contributions Support Public Opinion",
+        caption.above = TRUE)
+
+model1_pubopo <- glm(`pass/fail`~propsupport_ORtotal+oppose -1,
+                  data = alldata, family=binomial(link=logit))
+model2_pubopo <- glm(`pass/fail`~propsupport_OoStotal+oppose -1,
+                  data = alldata, family=binomial(link=logit))
+model3_pubopo <- glm(`pass/fail`~propoppose_ORtotal+oppose -1,
+                  data = alldata, family=binomial(link=logit))
+model4_pubopo <- glm(`pass/fail`~propoppose_OoStotal+oppose -1,
+                  data = alldata, family=binomial(link=logit))
+model5_pubopo <- glm(`pass/fail`~propsupport_ORtotal+propsupport_OoStotal+propoppose_ORtotal+propoppose_OoStotal+oppose -1,
+                  data = alldata, family=binomial(link=logit))
+texreg::knitreg(list(model1_pubopo, model2_pubopo, model3_pubopo, model4_pubopo, model5_pubopo),
+        digits=3,
+        caption="OLS Regression Models Contributions Public Opinion Oppose",
+        caption.above = TRUE)
+
+m1_support <- glm(`pass/fail`~support -1,
+         data = alldata, family=binomial(link=logit))
+m3_OR_support <- glm(`pass/fail`~oregon_prop_support -1,
+         data = alldata, family=binomial(link=logit))
+m4_OR_oppose <- glm(`pass/fail`~oregon_prop_oppose -1,
+         data = alldata, family=binomial(link=logit))
+m5_OoS_support <- glm(`pass/fail`~OoS_prop_support -1,
+         data = alldata, family=binomial(link=logit))
+m6_OoS_oppose <- glm(`pass/fail`~OoS_prop_oppose -1,
+         data = alldata, family=binomial(link=logit)) 
+m7_all <- glm(`pass/fail`~support+oregon_prop_support+
+         oregon_prop_oppose+OoS_prop_support+OoS_prop_oppose -1,
+         data = alldata, family=binomial(link=logit))
+
+texreg::knitreg(list(m1_support, m3_OR_support, m4_OR_oppose, m5_OoS_support, m6_OoS_oppose,m7_all),
+                digits=3,
+                caption="OLS Regression Models Contributions PASS",
+                caption.above = TRUE)
+
+m2_oppose <- glm(`pass/fail`~oppose -1,
+         data = alldata, family=binomial(link=logit))
+m3_OR_support <- glm(`pass/fail`~oregon_prop_support -1,
+         data = alldata, family=binomial(link=logit))
+m4_OR_oppose <- glm(`pass/fail`~oregon_prop_oppose -1,
+         data = alldata, family=binomial(link=logit))
+m5_OoS_support <- glm(`pass/fail`~OoS_prop_support -1,
+         data = alldata, family=binomial(link=logit))
+m6_OoS_oppose <- glm(`pass/fail`~OoS_prop_oppose -1,
+         data = alldata, family=binomial(link=logit)) 
+m7_all <- glm(`pass/fail`~oppose+oregon_prop_support+
+         oregon_prop_oppose+OoS_prop_support+OoS_prop_oppose -1,
+         data = alldata, family=binomial(link=logit))
+texreg::knitreg(list(m2_oppose, m3_OR_support, m4_OR_oppose, m5_OoS_support, m6_OoS_oppose,m7_all),
+                digits=3,
+                caption="OLS Regression Models Contributions PASS",
+                caption.above = TRUE)
+
+m1_support <- glm(`pass/fail`~support -1,
+         data = alldata, family=binomial(link=logit))
+m2_oppose <- glm(`pass/fail`~oppose -1,
+         data = alldata, family=binomial(link=logit))
+m3_OR_support <- glm(`pass/fail`~oregon_prop_support -1,
+         data = alldata, family=binomial(link=logit))
+m4_OR_oppose <- glm(`pass/fail`~oregon_prop_oppose -1,
+         data = alldata, family=binomial(link=logit))
+m5_OoS_support <- glm(`pass/fail`~OoS_prop_support -1,
+         data = alldata, family=binomial(link=logit))
+m6_OoS_oppose <- glm(`pass/fail`~OoS_prop_oppose -1,
+         data = alldata, family=binomial(link=logit)) 
+m7_all <- glm(`pass/fail`~oppose+oregon_prop_support+
+         oregon_prop_oppose+OoS_prop_support+OoS_prop_oppose -1,
+         data = alldata, family=binomial(link=logit))
+texreg::knitreg(list(m1_support, m2_oppose, m3_OR_support, m4_OR_oppose, m5_OoS_support, m6_OoS_oppose,m7_all),
+                digits=3,
+                caption="OLS Regression Models Contributions PASS",
+                caption.above = TRUE)
+```
+
+```{r figure, echo=FALSE, warning=FALSE, fig.cap=NULL, tab.cap=NULL}
+
+aggregate_amount_total$`support/oppose`<- gsub("opppose", "oppose", aggregate_amount_total$`support/oppose`)
+aggregate_amount_total$ballot_measure <- as.numeric(aggregate_amount_total$ballot_measure)
+arrange(aggregate_amount_total, ballot_measure)
+ggplot(aggregate_amount_total, aes(x=factor(ballot_measure), y=aggregate_amount, fill=`support/oppose`))+
+  geom_histogram(stat='identity', binwidth = 30)+
+  scale_y_continuous(labels=scales::dollar_format())+
+  xlab("Ballot Measure")+
+  theme_classic()+
+  theme(axis.text.x=element_text(angle=90,size = 6))+
+  ylab("Aggregate Contribution Amount")+
+  ggtitle("Aggregate Contribution Amount Support/Oppose by Ballot Measure")+
+  guides(fill=guide_legend(title="Key"))+
+  theme(text = element_text(size = 8)) 
+
+combo <- rbind(aggregate_OR, aggregate_OoS)
+ombdat <- dplyr::bind_rows(list(`Oregon Contributions`=aggregate_OR_n, `Out of State Contributions`=aggregate_OoS_n),
+                           .id="dataset")
+ombdat$ballot_measure <- as.numeric(ombdat$ballot_measure)
+arrange(ombdat, ballot_measure)
+ggplot(ombdat,aes(x=factor(ballot_measure), y=aggregate_amount, fill=dataset))+
+  geom_histogram(stat='identity', binwidth = 30)+
+  scale_y_continuous(labels=scales::dollar_format())+
+  xlab("Ballot Measure")+
+  theme_classic()+
+  theme(axis.text.x=element_text(angle=90,size = 6))+
+  ylab("Aggregate Contribution Amount")+
+  ggtitle("Figure 1: Aggregate Contribution Amount by Ballot Measure and Origin")+
+  guides(fill=guide_legend(title="Key"))+
+  theme(text = element_text(size = 8)) 
+
+ggplot(combo, aes(x=factor(ballot_measure), y=aggregate_amount, fill=`support/oppose`))+
+  geom_histogram(stat='identity', binwidth = 30)+
+  scale_y_continuous(labels=scales::dollar_format())+
+  xlab("Ballot Measure")+
+  theme_classic()+
+  theme(axis.text.x=element_text(angle=90,size = 6))+
+  ylab("Aggregate Contribution Amount")+
+  ggtitle("Aggregate Contribution Amount Support/Oppose by Ballot Measure")+
+  guides(fill=guide_legend(title="Key"))+
+  theme(text = element_text(size = 8)) 
+
+```
+

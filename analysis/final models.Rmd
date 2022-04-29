@@ -1,0 +1,106 @@
+---
+output:
+  pdf_document: null
+  html_document:
+    fig_height: 6
+    fig_width: 9
+    toc: yes
+    toc_depth: 4
+  word_document:
+    toc_depth: '4'
+header-includes: \usepackage{caption}
+---
+\captionsetup[table]{labelformat=empty}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(ggalt)
+library(textreg)
+library(scales)
+library(ggthemes)
+library(kableExtra)
+library(hrbrthemes)
+library(dbplyr)
+library(tidyverse)
+library(lubridate)
+library(writexl)
+load("output/alldata.RData")
+load("output/aggregate_total.RData")
+load("output/aggregate_amount_total.RData")
+load("output/aggregate_OR.RData")
+load("output/aggregate_OoS.RData")
+load("output/aggregate_OR_n.RData")
+load("output/aggregate_OoS_n.RData")
+load("output/total.RData")
+```
+
+```{r figure, echo=FALSE, warning=FALSE, fig.cap=NULL, tab.cap=NULL, include=FALSE}
+combo <- rbind(aggregate_OR, aggregate_OoS)
+ombdat <- dplyr::bind_rows(list(`Oregon Contributions`=aggregate_OR_n, `Out of State Contributions`=aggregate_OoS_n),
+                           .id="dataset")
+ombdat$ballot_measure <- as.numeric(ombdat$ballot_measure)
+arrange(ombdat, ballot_measure)
+```
+
+```{r analysis, echo=FALSE, warning=FALSE, fig.cap=NULL, tab.cap=NULL}
+
+ggplot(ombdat,aes(x=factor(ballot_measure), y=aggregate_amount, fill=dataset))+
+  geom_histogram(stat='identity', binwidth = 30)+
+  scale_y_continuous(labels=scales::dollar_format())+
+  xlab("Ballot Measure")+
+  theme_classic()+
+  theme(axis.text.x=element_text(angle=90,size = 6))+
+  ylab("Aggregate Contribution Amount")+
+  ggtitle("Figure 1: Aggregate Contribution Amount by Ballot Measure and Origin")+
+  guides(fill=guide_legend(title="Key"))+
+  theme(text = element_text(size = 8)) 
+```
+/newpage
+```{r analysis models, echo=FALSE, warning=FALSE, results="asis", fig.cap=NULL, tab.cap=NULL}
+alldata$`pass/fail` <- as.factor(alldata$`pass/fail`)
+
+model_support<-  glm(`pass/fail`~oregon_prop_support+OoS_prop_support-1,
+                  data = alldata, family=binomial(link=logit))
+texreg::knitreg(list(model_support),
+        digits=3,
+        caption="Table 1: Oregon Contributions Regression Model",
+        custom.coef.names=c("OR contributions support", "OR contributions oppose"),
+        caption.above = TRUE)
+
+model_oppose <-  glm(`pass/fail`~oregon_prop_oppose+OoS_prop_oppose-1,
+                  data = alldata, family=binomial(link=logit))
+texreg::knitreg(list(model_oppose),
+        digits=3,
+        caption="Table 2: Out-of-State Contributions Regression Model",
+        custom.coef.names=c("OoS contributions support", "OoS contributions oppose"),
+        caption.above = TRUE)
+#second set of models
+
+model_oregon <- glm(`pass/fail`~support+
+                      oregon_prop_support+oregon_prop_oppose-1,
+                  data = alldata, family=binomial(link=logit))
+model_oregon_o <- glm(`pass/fail`~oppose+
+                      oregon_prop_support+oregon_prop_oppose-1,
+                  data = alldata, family=binomial(link=logit))
+model_OoS <- glm(`pass/fail`~support+
+                   OoS_prop_support+OoS_prop_oppose-1,
+                  data = alldata, family=binomial(link=logit))
+model_OoS_o <- glm(`pass/fail`~oppose+
+                   OoS_prop_support+OoS_prop_oppose-1,
+                  data = alldata, family=binomial(link=logit))
+model_all_money <- glm(`pass/fail`~oregon_prop_support+oregon_prop_oppose+
+                   OoS_prop_support+OoS_prop_oppose-1,
+                   data = alldata, family=binomial(link=logit))
+model_all <- glm(`pass/fail`~support+oppose+
+                   oregon_prop_support+oregon_prop_oppose+
+                   OoS_prop_support+OoS_prop_oppose-1,
+                  data = alldata, family=binomial(link=logit))
+
+texreg::knitreg(list(model_oregon, model_oregon_o, model_OoS,model_OoS_o, model_all_money, model_all),
+        digits=3,
+        caption="Table 3: Regression Models Public Opinion and Contributions",
+        custom.coef.names=c("public opinion support", "OR contributions support", "OR contributions oppose", "public opinion oppose", "OoS contributions support", "OoS contributions oppose"),
+        caption.above = TRUE)
+        
+```
